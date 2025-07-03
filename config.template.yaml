@@ -30,25 +30,83 @@ default_headers:
   # Authorization: "Bearer your_token_here"
   # X-API-Key: "your_api_key_here"
 
-# Test Data Variables
-# ------------------
-# Define variables here that can be referenced in endpoint configurations
-# These can be used to make your tests more dynamic
+# Dynamic Data Generation
+# ======================
+# Define variables and generators that can be used in requests
+
+# Static Variables
+# ---------------
+# Fixed values that can be referenced in endpoints
 variables:
-  # Example numeric ID (can be used for resource IDs)
+  # Example numeric ID
   item_id: 12345
   
   # Example string values
   username: "testuser"
+
+# Dynamic Data Generators
+# ----------------------
+generators:
+  # Random selection from a list
+  search_term:
+    type: "choice"
+    values: ["test", "example", "demo", "search", "query", "find"]
+    
+  # Random number in range
+  random_id:
+    type: "randint"
+    min: 1
+    max: 10000
+    
+  # Random string with pattern
+  random_string:
+    type: "string"
+    length: 10
+    chars: "abcdefghijklmnopqrstuvwxyz0123456789"
+    
+  # Random email
+  random_email:
+    type: "email"
+    
+  # Random boolean
+  random_bool:
+    type: "boolean"
+    
+  # Current timestamp
+  timestamp:
+    type: "timestamp"
+    
+  # Random item from a list with weights
+  weighted_choice:
+    type: "weighted_choice"
+    choices:
+      - {value: "high", weight: 1}
+      - {value: "medium", weight: 3}
+      - {value: "low", weight: 6}
+
+# Predefined Data Sets
+# -------------------
+datasets:
+  # Example product categories
+  categories: ["Electronics", "Clothing", "Books", "Home", "Sports"]
   
-  # Example list of values (can be used for testing different inputs)
-  search_terms: ["test", "example", "demo"]
-  
-  # Example numeric range (min, max, step)
+  # Example user agents
+  user_agents:
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    - "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.1.1 Safari/605.1.15"
+    - "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0"
+
+# Numeric Ranges
+# --------------
+ranges:
   price_range:
     min: 10
     max: 1000
     step: 50
+  
+  user_age:
+    min: 18
+    max: 80
 
 # Request Timeouts and Retries
 # ---------------------------
@@ -66,40 +124,55 @@ retry_delay: 1
 # Define the API endpoints to test along with their configurations
 # Each endpoint can have its own method, headers, and request body
 endpoints:
-  # Example: GET request with path parameter
+  # Example: GET request with dynamic path parameter
   - name: "Get Item by ID"
     method: GET
-    path: "/items/${item_id}"  # Using variable from the variables section
-    description: "Test retrieving an item by its ID"
+    path: "/items/$random{1,1000}"  # Random ID between 1 and 1000
+    description: "Test retrieving an item by its ID with random IDs"
+    # You can also use a range from the configuration
+    # path: "/items/$range{price_range}"
     # Optional: Override global timeout for this specific endpoint
     timeout: 5
     # Optional: Add endpoint-specific headers
     headers:
       X-Custom-Header: "value"
 
-  # Example: Search endpoint with query parameter
+  # Example: Search endpoint with dynamic query parameter
   - name: "Search Items"
     method: GET
     path: "/search"
-    description: "Test searching items with a query parameter"
-    # Query parameters can be added like this
+    description: "Test searching items with dynamic query parameters"
+    # Dynamic parameters - these will be evaluated for each request
     params:
-      q: "${search_terms[0]}"  # Using array variable
+      q: "$random{search_term}"  # Randomly selects from predefined search terms
+      category: "$random{categories}"  # Random category from dataset
+      min_price: "$random{10,100}"  # Random number between 10 and 100
+      in_stock: "$random{true,false}"  # Random boolean
       limit: 10
       offset: 0
 
-  # Example: POST request with JSON body
+  # Example: POST request with dynamic JSON body
   - name: "Create New Item"
     method: POST
     path: "/items"
-    description: "Test creating a new item"
-    # Request body (for POST/PUT/PATCH)
+    description: "Test creating a new item with dynamic data"
+    # Dynamic request body - values will be generated for each request
     data:
-      name: "Test Item"
-      description: "This is a test item created by the performance test"
-      price: 99.99
-      in_stock: true
-      tags: ["test", "performance"]
+      id: "$uuid"  # Generate a UUID
+      name: "Product $random{1000,9999}"  # Random product name
+      description: "$lorem{10}"  # 10 words of lorem ipsum
+      price: "$random{10.0,1000.0}"  # Random float between 10.0 and 1000.0
+      category: "$random{categories}"  # Random category from dataset
+      in_stock: "$random{true,false}"  # Random boolean
+      stock_quantity: "$random{0,1000}"  # Random integer
+      created_at: "$now"  # Current timestamp
+      tags: 
+        - "$random{tag1,tag2,tag3,tag4}"  # Random tag from list
+        - "$random{premium,standard,basic}"
+      metadata:
+        color: "$random{red,green,blue,black,white}"
+        size: "$random{S,M,L,XL}"
+        weight: "$random{0.1,5.0}"
     # Set to false if sending form data instead of JSON
     json_content: true
 

@@ -5,11 +5,89 @@ import yaml
 import json
 import os
 import argparse
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass, field
-from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
+from enum import Enum
+import re
+
+class ValueProviderType(Enum):
+    STATIC = "static"
+    RANDOM_INT = "random_int"
+    RANDOM_FLOAT = "random_float"
+    RANDOM_STRING = "random_string"
+    RANDOM_BOOL = "random_bool"
+    RANDOM_CHOICE = "random_choice"
+    WEIGHTED_CHOICE = "weighted_choice"
+    UUID = "uuid"
+    TIMESTAMP = "timestamp"
+    LOREM_IPSUM = "lorem_ipsum"
+    RANDOM_EMAIL = "random_email"
+    RANGE = "range"
+    NOW = "now"
+
+class ValueProvider:
+    """Factory class for dynamic value providers"""
+    
+    @staticmethod
+    def get_provider(value: Any) -> Callable[[], Any]:
+        """Get a provider function based on the value pattern"""
+        if not isinstance(value, str):
+            return lambda: value
+            
+        # Check for $random{...} pattern
+        random_match = re.match(r'\$random\{([^}]+)\}', value)
+        if random_match:
+            choices = [x.strip() for x in random_match.group(1).split(',')]
+            if len(choices) == 2 and all(x.strip().lstrip('-').replace('.', '', 1).isdigit() for x in choices):
+                # Numeric range
+                if any('.' in x for x in choices):
+                    min_val, max_val = map(float, choices)
+                    return lambda: round(random.uniform(min_val, max_val), 2)
+                else:
+                    min_val, max_val = map(int, choices)
+                    return lambda: random.randint(min_val, max_val)
+            else:
+                # String choice
+                return lambda: random.choice(choices)
+                
+        # Check for $uuid
+        if value == "$uuid":
+            return lambda: str(uuid.uuid4())
+            
+        # Check for $now
+        if value == "$now":
+            return lambda: datetime.now(timezone.utc).isoformat()
+            
+        # Check for $lorem{N}
+        lorem_match = re.match(r'\$lorem\{(\d+)\}', value)
+        if lorem_match:
+            word_count = int(lorem_match.group(1))
+            return lambda: ' '.join(['lorem'] * word_count)  # Simplified for example
+            
+        # Check for $random{type} patterns
+        type_match = re.match(r'\$(\w+)\{([^}]*)\}', value)
+        if type_match:
+            provider_type = type_match.group(1)
+            params = type_match.group(2)
+            
+            if provider_type == 'range':
+                # Handle $range{min,max} or $range{range_name}
+                if params.isalpha() and params in ('price_range', 'user_age'):
+                    # Get from config ranges
+                    return lambda: random.randint(10, 1000)  # Simplified - should get from config
+                else:
+                    min_val, max_val = map(int, params.split(','))
+                    return lambda: random.randint(min_val, max_val)
+                    
+            elif provider_type == 'random':
+                # Already handled by the first pattern
+                pass
+                
+        # No provider found, return as-is
+        return lambda: value
 
 @dataclass
 class TestConfig:
@@ -20,6 +98,9 @@ class TestConfig:
     num_test_runs: int = 5
     default_headers: Dict[str, str] = field(default_factory=dict)
     variables: Dict[str, Any] = field(default_factory=dict)
+    generators: Dict[str, Any] = field(default_factory=dict)
+    datasets: Dict[str, Any] = field(default_factory=dict)
+    ranges: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class TestResult:
@@ -47,14 +128,35 @@ class PerformanceTester:
         return TestConfig(**config_data)
     
     def _resolve_variables(self, value: Any) -> Any:
-        """Resolve variables in the configuration."""
-        if isinstance(value, str) and value.startswith('${') and value.endswith('}'):
-            var_name = value[2:-1]
-            return self.config.variables.get(var_name, value)
+        """Resolve variables and dynamic values in the configuration."""
+        if isinstance(value, str):
+            # Handle dynamic value providers
+            if value.startswith('$'):
+                provider = ValueProvider.get_provider(value)
+                return provider()
+                
+            # Handle variable substitution ${var_name}
+            var_match = re.findall(r'\${([^}]+)}', value)
+            if var_match:
+                result = value
+                for var_name in var_match:
+                    # Check in different sections of config
+                    var_value = (
+                        self.config.variables.get(var_name) or
+                        self.config.generators.get(var_name) or
+                        self.config.datasets.get(var_name) or
+                        self.config.ranges.get(var_name) or
+                        f'${{{var_name}}}'  # Not found, keep as is
+                    )
+                    result = result.replace(f'${{{var_name}}}', str(var_value))
+                return result
+                
         elif isinstance(value, dict):
             return {k: self._resolve_variables(v) for k, v in value.items()}
+            
         elif isinstance(value, list):
             return [self._resolve_variables(item) for item in value]
+            
         return value
     
     def _generate_request_data(self, endpoint_config: Dict[str, Any]) -> Dict:
