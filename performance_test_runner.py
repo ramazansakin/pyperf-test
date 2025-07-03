@@ -185,17 +185,17 @@ def generate_html_report(stats: Dict, output_dir: str = 'reports'):
     <head>
         <title>Performance Test Report</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-            .metric { margin: 10px 0; }
-            .success { color: green; }
-            .error { color: red; }
-            .warning { color: orange; font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f2f2f2; }
-            tr:nth-child(even) { background-color: #f9f9f9; }
-            pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+            body {{ font-family: Arial, sans-serif; margin: 20px; }}
+            .summary {{ background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px; }}
+            .metric {{ margin: 10px 0; }}
+            .success {{ color: green; }}
+            .error {{ color: red; }}
+            .warning {{ color: orange; font-weight: bold; }}
+            table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+            th {{ background-color: #f2f2f2; }}
+            tr:nth-child(even) {{ background-color: #f9f9f9; }}
+            pre {{ background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }}
         </style>
     </head>
     <body>
@@ -217,15 +217,11 @@ def generate_html_report(stats: Dict, output_dir: str = 'reports'):
     
     # Add response time metrics only if there were successful requests
     if has_successful:
-        html += """
-            <div class="metric">Average Response Time: {avg_time:.2f} ms</div>
-            <div class="metric">Min Response Time: {min_time:.2f} ms</div>
-            <div class="metric">Max Response Time: {max_time:.2f} ms</div>
-        """.format(
-            avg_time=stats.get('avg_time', 0),
-            min_time=stats.get('min_time', 0),
-            max_time=stats.get('max_time', 0)
-        )
+            html += f"""
+            <div class="metric">Average Response Time: {stats.get('avg_time', 0):.2f} ms</div>
+            <div class="metric">Min Response Time: {stats.get('min_time', 0):.2f} ms</div>
+            <div class="metric">Max Response Time: {stats.get('max_time', 0):.2f} ms</div>
+        """
     else:
         html += """
             <div class="metric warning">No successful requests to calculate response times</div>
