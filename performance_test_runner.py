@@ -165,7 +165,7 @@ class PerformanceTester:
             'errors': [{'endpoint': r.endpoint, 'error': r.error} for r in failed]
         }
 
-def generate_html_report(stats: Dict, output_dir: str = 'reports'):
+def generate_html_report(stats: Dict, output_dir: str = 'reports', is_aggregated: bool = False) -> str:
     """Generate an HTML report from test statistics."""
     os.makedirs(output_dir, exist_ok=True)
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -217,11 +217,38 @@ def generate_html_report(stats: Dict, output_dir: str = 'reports'):
     
     # Add response time metrics only if there were successful requests
     if has_successful:
-            html += f"""
+        html += f"""
             <div class="metric">Average Response Time: {stats.get('avg_time', 0):.2f} ms</div>
             <div class="metric">Min Response Time: {stats.get('min_time', 0):.2f} ms</div>
             <div class="metric">Max Response Time: {stats.get('max_time', 0):.2f} ms</div>
         """
+        
+        # Add individual run stats if this is an aggregated report
+        if is_aggregated and 'individual_runs' in stats:
+            html += """
+                <div class="metric">
+                    <h3>Individual Run Statistics</h3>
+                    <table>
+                        <tr>
+                            <th>Run #</th>
+                            <th>Success Rate</th>
+                            <th>Avg Response Time (ms)</th>
+                        </tr>
+            """
+            
+            for run in stats['individual_runs']:
+                html += f"""
+                    <tr>
+                        <td>{run['run']}</td>
+                        <td>{run['success_rate']:.2f}%</td>
+                        <td>{run['avg_time']:.2f}</td>
+                    </tr>
+                """
+            
+            html += """
+                    </table>
+                </div>
+            """
     else:
         html += """
             <div class="metric warning">No successful requests to calculate response times</div>
@@ -230,11 +257,12 @@ def generate_html_report(stats: Dict, output_dir: str = 'reports'):
     html += "</div>"  # Close summary div
     
     # Add errors section if any
-    if stats.get('errors'):
+    errors = stats.get('errors', []) if not is_aggregated else (stats.get('all_errors', [])[:50])  # Limit to 50 errors in aggregated report
+    if errors:
         html += "<h2>Error Details</h2>"
         html += "<p>First few errors encountered:</p>"
         html += "<table><tr><th>#</th><th>Endpoint</th><th>Status Code</th><th>Error</th></tr>"
-        for i, error in enumerate(stats['errors'][:10], 1):  # Show first 10 errors
+        for i, error in enumerate(errors[:10], 1):  # Show first 10 errors
             status_code = error.get('status_code', 'N/A')
             endpoint = error.get('endpoint', 'Unknown')
             error_msg = error.get('error', 'No error details available')
@@ -251,13 +279,13 @@ def generate_html_report(stats: Dict, output_dir: str = 'reports'):
                 <td><pre>{error_msg}</pre></td>
             </tr>"""
         
-        if len(stats['errors']) > 10:
-            html += f"<tr><td colspan='4'>... and {len(stats['errors']) - 10} more errors</td></tr>"
+        if len(errors) > 10:
+            html += f"<tr><td colspan='4'>... and {len(errors) - 10} more errors (showing first 10)</td></tr>"
             
         html += "</table>"
         
         # Add debugging tips if all requests failed
-        if successful_requests == 0 and total_requests > 0:
+        if successful_requests == 0 and total_requests > 0 and not is_aggregated:
             html += """
             <div style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border-left: 5px solid #ffc107;">
                 <h3>Debugging Tips</h3>
@@ -278,6 +306,60 @@ def generate_html_report(stats: Dict, output_dir: str = 'reports'):
     
     return report_path
 
+def aggregate_results(all_stats: List[Dict]) -> Dict:
+    """Aggregate results from multiple test runs."""
+    if not all_stats:
+        return {}
+    
+    # Initialize aggregated stats
+    aggregated = {
+        'total_runs': len(all_stats),
+        'total_requests': 0,
+        'successful_requests': 0,
+        'failed_requests': 0,
+        'response_times': [],
+        'all_errors': [],
+        'run_stats': []
+    }
+    
+    # Aggregate data from all runs
+    for stats in all_stats:
+        aggregated['total_requests'] += stats.get('total_requests', 0)
+        aggregated['successful_requests'] += stats.get('successful_requests', 0)
+        aggregated['failed_requests'] += stats.get('failed_requests', 0)
+        
+        if 'response_times' in stats and stats['response_times']:
+            aggregated['response_times'].extend(stats['response_times'])
+        
+        if 'errors' in stats:
+            aggregated['all_errors'].extend(stats['errors'])
+        
+        # Store individual run stats
+        aggregated['run_stats'].append({
+            'success_rate': (stats.get('successful_requests', 0) / stats.get('total_requests', 1)) * 100,
+            'avg_time': stats.get('avg_time', 0),
+            'min_time': stats.get('min_time', 0),
+            'max_time': stats.get('max_time', 0)
+        })
+    
+    # Calculate aggregated metrics
+    if aggregated['response_times']:
+        aggregated['avg_time'] = sum(aggregated['response_times']) / len(aggregated['response_times'])
+        aggregated['min_time'] = min(aggregated['response_times'])
+        aggregated['max_time'] = max(aggregated['response_times'])
+    else:
+        aggregated['avg_time'] = 0
+        aggregated['min_time'] = 0
+        aggregated['max_time'] = 0
+    
+    # Calculate success rate across all runs
+    if aggregated['total_requests'] > 0:
+        aggregated['success_rate'] = (aggregated['successful_requests'] / aggregated['total_requests']) * 100
+    else:
+        aggregated['success_rate'] = 0
+    
+    return aggregated
+
 def main():
     parser = argparse.ArgumentParser(description='Run performance tests')
     parser.add_argument('--config', type=str, default='config.yaml',
@@ -291,25 +373,44 @@ def main():
         tester = PerformanceTester(args.config)
         print(f"Running performance tests with {tester.config.num_workers} workers...")
         
+        all_stats = []
+        
         # Run tests multiple times if specified
         for run in range(1, tester.config.num_test_runs + 1):
             print(f"\n--- Test Run {run}/{tester.config.num_test_runs} ---")
             stats = tester.run_tests()
+            all_stats.append(stats)
             
-            # Print summary
+            # Print summary for this run
             print(f"\nTest Run {run} Summary:")
             print(f"  Total Requests: {stats['total_requests']}")
             print(f"  Successful: {stats['successful_requests']}")
             print(f"  Failed: {stats['failed_requests']}")
             print(f"  Success Rate: {(stats['successful_requests'] / stats['total_requests'] * 100):.2f}%")
-            print(f"  Avg Response Time: {stats['avg_time']:.2f} ms")
+            print(f"  Avg Response Time: {stats.get('avg_time', 0):.2f} ms")
+        
+        # Generate a single comprehensive report for all runs
+        if all_stats:
+            aggregated = aggregate_results(all_stats)
             
-            # Generate report for each run
-            report_path = generate_html_report(stats, args.output)
-            print(f"\nReport generated: {report_path}")
+            # Add individual run stats to the aggregated results
+            aggregated['individual_runs'] = [
+                {
+                    'run': i + 1,
+                    'success_rate': run_stats['success_rate'],
+                    'avg_time': run_stats['avg_time']
+                }
+                for i, run_stats in enumerate(aggregated['run_stats'])
+            ]
+            
+            # Generate the final report
+            report_path = generate_html_report(aggregated, args.output, is_aggregated=True)
+            print(f"\nComprehensive report generated: {report_path}")
     
     except Exception as e:
         print(f"Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return 1
     
     return 0
