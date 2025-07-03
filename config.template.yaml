@@ -1,0 +1,198 @@
+# Performance Test Configuration Template
+# ====================================
+# This is a template configuration file for the API Performance Test Runner.
+# Copy this file to 'config.yaml' and modify it according to your API testing needs.
+
+# Base Configuration
+# -----------------
+# Base URL of the API (including version if applicable)
+base_url: "http://api.example.com/v1"
+
+# Test Execution Settings
+# ----------------------
+# Number of concurrent workers (simulating concurrent users)
+num_workers: 10
+
+# Number of requests to send to each endpoint configuration
+requests_per_endpoint: 100
+
+# Number of times to repeat the entire test suite
+num_test_runs: 3
+
+# Global Headers
+# --------------
+# Headers to include in all requests (e.g., for authentication)
+# Remove or modify these according to your API's requirements
+default_headers:
+  Content-Type: application/json
+  Accept: application/json
+  # Uncomment and update with your authentication method if needed
+  # Authorization: "Bearer your_token_here"
+  # X-API-Key: "your_api_key_here"
+
+# Test Data Variables
+# ------------------
+# Define variables here that can be referenced in endpoint configurations
+# These can be used to make your tests more dynamic
+variables:
+  # Example numeric ID (can be used for resource IDs)
+  item_id: 12345
+  
+  # Example string values
+  username: "testuser"
+  
+  # Example list of values (can be used for testing different inputs)
+  search_terms: ["test", "example", "demo"]
+  
+  # Example numeric range (min, max, step)
+  price_range:
+    min: 10
+    max: 1000
+    step: 50
+
+# Request Timeouts and Retries
+# ---------------------------
+# Global timeout for requests in seconds (overridable per endpoint)
+timeout: 10
+
+# Number of retries for failed requests (0 to disable)
+max_retries: 2
+
+# Delay between retries in seconds
+retry_delay: 1
+
+# Test Endpoints
+# --------------
+# Define the API endpoints to test along with their configurations
+# Each endpoint can have its own method, headers, and request body
+endpoints:
+  # Example: GET request with path parameter
+  - name: "Get Item by ID"
+    method: GET
+    path: "/items/${item_id}"  # Using variable from the variables section
+    description: "Test retrieving an item by its ID"
+    # Optional: Override global timeout for this specific endpoint
+    timeout: 5
+    # Optional: Add endpoint-specific headers
+    headers:
+      X-Custom-Header: "value"
+
+  # Example: Search endpoint with query parameter
+  - name: "Search Items"
+    method: GET
+    path: "/search"
+    description: "Test searching items with a query parameter"
+    # Query parameters can be added like this
+    params:
+      q: "${search_terms[0]}"  # Using array variable
+      limit: 10
+      offset: 0
+
+  # Example: POST request with JSON body
+  - name: "Create New Item"
+    method: POST
+    path: "/items"
+    description: "Test creating a new item"
+    # Request body (for POST/PUT/PATCH)
+    data:
+      name: "Test Item"
+      description: "This is a test item created by the performance test"
+      price: 99.99
+      in_stock: true
+      tags: ["test", "performance"]
+    # Set to false if sending form data instead of JSON
+    json_content: true
+
+  # Example: PUT request with dynamic data
+  - name: "Update Item"
+    method: PUT
+    path: "/items/${item_id}"
+    description: "Test updating an existing item"
+    data:
+      name: "Updated Item"
+      price: 109.99
+      # You can use any Python expression in ${...} that references variables
+      discount: "${price_range.min / 100}"
+
+  # Example: DELETE request
+  - name: "Delete Item"
+    method: DELETE
+    path: "/items/${item_id}"
+    description: "Test deleting an item"
+
+  # Example: Endpoint with authentication
+  - name: "User Profile"
+    method: GET
+    path: "/users/${username}/profile"
+    description: "Test accessing authenticated user profile"
+    # Override global headers if needed
+    headers:
+      Authorization: "Bearer ${auth_token}"  # You would define auth_token in variables
+
+# Test Scenarios (Optional)
+# ------------------------
+# Define different test scenarios with different configurations
+scenarios:
+  # Example: Smoke test with minimal load
+  smoke_test:
+    num_workers: 1
+    requests_per_endpoint: 5
+    num_test_runs: 1
+    endpoints:
+      - "Get Item by ID"
+      - "Search Items"
+  
+  # Example: Load test with higher concurrency
+  load_test:
+    num_workers: 50
+    requests_per_endpoint: 1000
+    num_test_runs: 3
+
+# Reporting Configuration
+# ---------------------
+report:
+  # Directory to save HTML reports
+  output_dir: "reports"
+  
+  # Include detailed request/response in the report
+  include_request_details: true
+  
+  # Include response body in the report (may contain sensitive data)
+  include_response_body: false
+  
+  # Generate a timestamp for each report file
+  timestamp_format: "%Y%m%d_%H%M%S"
+
+# Logging Configuration
+# --------------------
+log:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+  
+  # Log file path (leave empty to log to console only)
+  file: "performance_tests.log"
+  
+  # Log format
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# Advanced Configuration
+# ---------------------
+# SSL/TLS settings (for HTTPS connections)
+ssl:
+  # Verify SSL certificates (set to false for self-signed certificates)
+  verify: true
+  
+  # Path to CA bundle file if needed
+  # ca_bundle: "/path/to/ca_bundle.pem"
+
+# Proxy configuration (if needed)
+# proxy:
+#   http: "http://proxy.example.com:8080"
+#   https: "https://proxy.example.com:8080"
+
+# Rate limiting (requests per second per worker)
+rate_limit: 100
+
+# Random delays between requests to simulate real user behavior
+# (in seconds, can be a range [min, max] or a fixed value)
+request_delay: [0.1, 0.5]
